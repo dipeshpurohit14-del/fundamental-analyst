@@ -48,11 +48,15 @@ src/
     securities.js   Curated reference universe (name/symbol/exchange/sector, no price data)
 
 netlify/functions/
+  package.json      Forces CommonJS for this folder (overrides root's "type": "module")
   quote.js          Live (delayed) quote proxy
   chart.js          Historical OHLCV proxy
   profile.js        Company profile / fundamentals / statements / ETF holdings proxy
   search.js         Symbol search proxy
-  _yahooSession.js  Shared cookie+crumb session helper (see section 4)
+  lib/
+    yahooSession.js Shared cookie+crumb session helper (see section 4) — kept in a subfolder
+                     so Netlify's function auto-discovery doesn't mistake it for its own
+                     handler-less function
 ```
 
 **Provider abstraction:** every page imports from `services/marketData/provider.js`, never
@@ -91,7 +95,7 @@ cost, with no API key to manage.
   non-commercial, educational research tool like this one — not to a commercial data
   redistribution product sold to end investors.
 - **Anti-bot handshake required.** Since 2024, Yahoo requires a session cookie + "crumb" token
-  per request or it returns 401. `netlify/functions/_yahooSession.js` performs that handshake
+  per request or it returns 401. `netlify/functions/lib/yahooSession.js` performs that handshake
   and caches it for ~30 minutes per warm function instance. If Yahoo changes this mechanism
   again, requests will start failing with a clear "Market data temporarily unavailable"
   message rather than silently showing wrong data — but the code will need an update to match.
@@ -211,7 +215,8 @@ section 3).
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| "Market data temporarily unavailable" everywhere | Yahoo's anti-bot handshake changed, or IP-level rate limiting kicked in | Check Netlify function logs; update `_yahooSession.js` if Yahoo's cookie/crumb flow changed |
+| Every function call fails with `Unexpected token '<' ... is not valid JSON`, prices/index values blank | Root `package.json` has `"type": "module"`, but the functions use CommonJS (`require`/`module.exports`). Node refuses to load them, the function 404s, and the SPA catch-all redirect masks that 404 by serving `index.html` (HTML) where JSON was expected | Fixed by adding `netlify/functions/package.json` with `{ "type": "commonjs" }`, which overrides the module type for just that folder — no need to rename files or touch `require`/`module.exports` syntax |
+| "Market data temporarily unavailable" everywhere | Yahoo's anti-bot handshake changed, or IP-level rate limiting kicked in | Check Netlify function logs; update `netlify/functions/lib/yahooSession.js` if Yahoo's cookie/crumb flow changed |
 | A specific stock shows mostly "Data unavailable" | That field genuinely isn't in Yahoo's response for that symbol (common for smaller/less-covered companies) | Expected behavior — the app never fabricates missing data |
 | Search returns nothing for a valid ticker | Symbol isn't in the curated list and Yahoo's live search didn't match your query text | Try the company's full name instead of an abbreviation |
 | Local `npm run dev` shows blank data | Vite alone doesn't run Netlify Functions | Use `netlify dev` instead (see section 7) |
