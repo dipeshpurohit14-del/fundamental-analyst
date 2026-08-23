@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom';
 import { useAsync } from '../hooks/useAsync';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { getQuote, getETFProfile, getETFHoldings } from '../services/marketData/provider';
-import { fmtINR, fmtSignedPct, fmtPct, changeColor, formatCompactINR, fmtTime, isMissing, DATA_UNAVAILABLE } from '../utils/format';
+import { fmtINR, fmtSignedPct, fmtPct, fmtNum, changeColor, formatCompactINR, fmtTime, isMissing, DATA_UNAVAILABLE } from '../utils/format';
 import PriceChart from '../components/PriceChart';
 import StatTile from '../components/StatTile';
 import { LoadingState, ErrorState } from '../components/States';
@@ -13,8 +13,8 @@ export default function ETFAnalysis() {
   const { add, remove, has } = useWatchlist();
 
   const { loading: qLoading, error: qError, data: quote } = useAsync(() => getQuote(symbol), [symbol]);
-  const { loading: pLoading, data: etfProfile } = useAsync(() => getETFProfile(symbol), [symbol]);
-  const { loading: hLoading, data: holdings } = useAsync(() => getETFHoldings(symbol), [symbol]);
+  const { loading: pLoading, error: pError, data: etfProfile } = useAsync(() => getETFProfile(symbol), [symbol]);
+  const { loading: hLoading, error: hError, data: holdings } = useAsync(() => getETFHoldings(symbol), [symbol]);
 
   if (qLoading) return <div className="max-w-6xl mx-auto px-4 py-16"><LoadingState label={`Loading ${symbol}…`} /></div>;
   if (qError) return <div className="max-w-6xl mx-auto px-4 py-16"><ErrorState message={qError.message} /></div>;
@@ -31,7 +31,10 @@ export default function ETFAnalysis() {
               <Star size={20} className={watched ? 'fill-amber-500 text-amber-500' : 'text-faint'} />
             </button>
           </div>
-          <p className="text-sm text-muted">{symbol} · {quote.exchange} · ETF{etfProfile?.trackingIndex && !isMissing(etfProfile.trackingIndex) ? ` · Tracks ${etfProfile.trackingIndex}` : ''}</p>
+          <p className="text-sm text-muted">
+            {symbol} · {quote.exchange} · ETF
+            {etfProfile?.trackingIndex && !isMissing(etfProfile.trackingIndex) ? ` · Tracks ${etfProfile.trackingIndex}` : ''}
+          </p>
         </div>
         <div className="text-right">
           <div className="tnum font-mono text-3xl text-paper">{fmtINR(quote.price)}</div>
@@ -42,12 +45,27 @@ export default function ETFAnalysis() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <StatTile label="AUM" value={pLoading ? '…' : (isMissing(etfProfile?.aum) ? DATA_UNAVAILABLE : formatCompactINR(etfProfile.aum))} />
-        <StatTile label="Expense Ratio" value={DATA_UNAVAILABLE} sub="Not exposed by current data source" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-2">
+        <StatTile
+          label="AUM"
+          value={pLoading ? '…' : isMissing(etfProfile?.aum) ? DATA_UNAVAILABLE : formatCompactINR(etfProfile.aum)}
+        />
+        <StatTile label="Expense Ratio" value={DATA_UNAVAILABLE} sub="Not exposed by data source" />
+        <StatTile
+          label="Dividend Yield"
+          value={pLoading ? '…' : isMissing(etfProfile?.dividendYield) ? DATA_UNAVAILABLE : fmtPct(etfProfile.dividendYield)}
+        />
+        <StatTile label="Volume" value={isMissing(quote.volume) ? DATA_UNAVAILABLE : fmtNum(quote.volume, 0)} />
         <StatTile label="52W High" value={fmtINR(quote.fiftyTwoWeekHigh)} />
         <StatTile label="52W Low" value={fmtINR(quote.fiftyTwoWeekLow)} />
       </div>
+
+      {pError && !pLoading && (
+        <p className="text-xs text-loss mb-6">
+          Some fund details (AUM, dividend yield) couldn't be loaded: {pError.message}
+        </p>
+      )}
+      {!pError && <div className="mb-6" />}
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
@@ -57,7 +75,8 @@ export default function ETFAnalysis() {
           <div className="card p-5">
             <h4 className="text-sm font-medium text-paper mb-3">Top Holdings</h4>
             {hLoading && <p className="text-xs text-muted">Loading…</p>}
-            {!hLoading && holdings && !holdings.holdingsAvailable && (
+            {hError && !hLoading && <p className="text-xs text-loss">Holdings couldn't be loaded: {hError.message}</p>}
+            {!hLoading && !hError && holdings && !holdings.holdingsAvailable && (
               <p className="text-xs text-muted">Holdings breakdown not provided by the current data source for this ETF.</p>
             )}
             {!hLoading && holdings?.holdingsAvailable && (
@@ -72,13 +91,13 @@ export default function ETFAnalysis() {
             )}
           </div>
 
-          {!hLoading && holdings?.sectorWeightings?.length > 0 && (
+          {!hLoading && !hError && holdings?.sectorWeightings?.length > 0 && (
             <div className="card p-5">
               <h4 className="text-sm font-medium text-paper mb-3">Sector Allocation</h4>
               <ul className="space-y-2">
                 {holdings.sectorWeightings.map((sw) => (
                   <li key={sw.sector} className="flex justify-between text-sm">
-                    <span className="text-muted capitalize">{sw.sector.replace(/_/g, ' ')}</span>
+                    <span className="text-muted capitalize">{String(sw.sector).replace(/_/g, ' ')}</span>
                     <span className="tnum font-mono text-paper">{fmtPct(sw.weight)}</span>
                   </li>
                 ))}
@@ -88,7 +107,7 @@ export default function ETFAnalysis() {
         </div>
       </div>
 
-      {!pLoading && etfProfile && !isMissing(etfProfile.description) && (
+      {!pLoading && !pError && etfProfile && !isMissing(etfProfile.description) && (
         <div className="card p-5 mt-6">
           <h3 className="text-sm font-medium text-paper mb-2">About this ETF</h3>
           <p className="text-sm text-muted leading-relaxed">{etfProfile.description}</p>
