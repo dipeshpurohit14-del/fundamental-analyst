@@ -386,10 +386,14 @@ export async function getETFHoldings(symbol) {
     weight: val(h.holdingPercent) != null ? val(h.holdingPercent) * 100 : null,
   }));
 
-  const sectorWeightings = (th.sectorWeightings || []).map((sw) => {
-    const [key, v] = Object.entries(sw)[0];
-    return { sector: key, weight: val(v) != null ? val(v) * 100 : null };
-  });
+   const sectorWeightings = (th.sectorWeightings || [])
+    .map((sw) => {
+      const entry = Object.entries(sw || {})[0];
+      if (!entry) return null;
+      const [key, v] = entry;
+      return { sector: key, weight: val(v) != null ? val(v) * 100 : null };
+    })
+    .filter(Boolean);
 
   return {
     holdings: holdings.length ? holdings : [],
