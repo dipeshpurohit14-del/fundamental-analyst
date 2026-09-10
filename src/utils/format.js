@@ -12,14 +12,7 @@ export function fmtINR(value, { compact = false, decimals = 2 } = {}) {
   return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
-export function formatCompactINR(n) {
-  if (isMissing(n)) return DATA_UNAVAILABLE;
-  const abs = Math.abs(n);
-  if (abs >= 1e7) return '₹' + (n / 1e7).toFixed(2) + ' Cr';
-  if (abs >= 1e5) return '₹' + (n / 1e5).toFixed(2) + ' L';
-  if (abs >= 1e3) return '₹' + (n / 1e3).toFixed(2) + ' K';
-  return '₹' + n.toFixed(2);
-}
+export function formatCompactINR(n) { if (isMissing(n)) return DATA_UNAVAILABLE; const num = Number(n); if (!Number.isFinite(num)) return DATA_UNAVAILABLE; const abs = Math.abs(num); if (abs >= 1e7) return '₹' + (num / 1e7).toFixed(2) + ' Cr'; if (abs >= 1e5) return '₹' + (num / 1e5).toFixed(2) + ' L'; if (abs >= 1e3) return '₹' + (num / 1e3).toFixed(2) + ' K'; return '₹' + num.toFixed(2); }
 
 export function fmtNum(value, decimals = 2) {
   if (isMissing(value)) return DATA_UNAVAILABLE;
