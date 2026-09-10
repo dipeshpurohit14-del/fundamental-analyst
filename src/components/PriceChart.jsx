@@ -22,10 +22,7 @@ export default function PriceChart({ symbol, trailingEps }) {
     }));
   }, [data, trailingEps]);
 
-  const first = chartData[0]?.close;
-  const last = chartData[chartData.length - 1]?.close;
-  const periodChangePct = first && last ? ((last - first) / first) * 100 : null;
-  const positive = (periodChangePct ?? 0) >= 0;
+ const first = chartData[0]?.close; const last = chartData[chartData.length - 1]?.close; const periodChangePct = Number.isFinite(first) && Number.isFinite(last) && first !== 0 ? ((last - first) / first) * 100 : null; const positive = (periodChangePct ?? 0) >= 0;
 
   return (
     <div className="card p-4">
@@ -73,15 +70,7 @@ export default function PriceChart({ symbol, trailingEps }) {
       {!loading && !error && chartData.length > 0 && (
         <>
           <div className="flex items-baseline gap-2 mb-2">
-            <span className="tnum font-mono text-2xl text-paper">
-              {mode === 'price' ? fmtINR(last) : (chartData[chartData.length - 1]?.pe?.toFixed(1) ?? DATA_UNAVAILABLE)}
-            </span>
-            {periodChangePct !== null && (
-              <span className={`text-sm tnum font-mono ${positive ? 'text-gain' : 'text-loss'}`}>
-                {positive ? '+' : ''}
-                {periodChangePct.toFixed(2)}% ({range})
-              </span>
-            )}
+           <span className="tnum font-mono text-2xl text-paper"> {mode === 'price' ? fmtINR(last) : Number.isFinite(chartData[chartData.length - 1]?.pe) ? chartData[chartData.length - 1].pe.toFixed(1) : DATA_UNAVAILABLE} </span> {periodChangePct !== null && ( <span className={`text-sm tnum font-mono ${positive ? 'text-gain' : 'text-loss'}`}> {positive ? '+' : ''} {Number.isFinite(periodChangePct) ? periodChangePct.toFixed(2) : '0.00'}% ({range}) </span> )}
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
