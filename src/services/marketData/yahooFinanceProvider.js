@@ -300,6 +300,20 @@ function mapStatementRows(rows, fieldMap) {
   }).sort((a, b) => (a.period || 0) - (b.period || 0));
 }
 
+// If a metric is exactly 0 across every available period, that's far more
+// likely to be Yahoo defaulting a missing field to zero than a real business
+// result (especially for large, profitable companies) — treat it as
+// unavailable rather than display a misleading "₹0.00".
+function nullifyImplausibleZeroColumns(rows, keys) {
+  if (rows.length === 0) return rows;
+  const allZeroKeys = keys.filter((key) => rows.every((r) => r[key] === 0));
+  if (allZeroKeys.length === 0) return rows;
+  return rows.map((r) => {
+    const copy = { ...r };
+    for (const key of allZeroKeys) copy[key] = null;
+    return copy;
+  });
+}
 export async function getFinancialStatements(symbol) {
   const s = await getSummary(symbol);
 
@@ -333,24 +347,54 @@ export async function getFinancialStatements(symbol) {
     netIncome: 'netIncome',
   });
 
-  // Derive EPS per period from net income if a shares count isn't directly
-  // available per period (Yahoo doesn't expose historical share count here).
+  const incomeWithEbitda = income.map((r) => ({ ...r, ebitda: r.ebit ?? null }));
+  const incomeClean = nullifyImplausibleZeroColumns(incomeWithEbitda, [
+    'revenue',
+    'costOfRevenue',
+    'grossProfit',
+    'operatingIncome',
+    'ebit',
+    'ebitda',
+    'interestExpense',
+    'incomeTaxExpense',
+    'netIncome',
+  ]);
+
+  const balanceWithDebt = balance.map((r) => ({
+    ...r,
+    debt: (r.shortLongTermDebt ?? 0) + (r.longTermDebt ?? 0) || r.shortLongTermDebt || r.longTermDebt || null,
+  }));
+  const balanceClean = nullifyImplausibleZeroColumns(balanceWithDebt, [
+    'totalAssets',
+    'totalCurrentAssets',
+    'cash',
+    'totalLiabilities',
+    'totalCurrentLiabilities',
+    'debt',
+    'totalStockholderEquity',
+  ]);
+
+  const cashflowWithFcf = cashflow.map((r) => ({
+    ...r,
+    freeCashFlow:
+      r.operatingCashFlow != null && r.capitalExpenditures != null
+        ? r.operatingCashFlow + r.capitalExpenditures // capex is already negative in Yahoo's convention
+        : null,
+  }));
+  const cashflowClean = nullifyImplausibleZeroColumns(cashflowWithFcf, [
+    'operatingCashFlow',
+    'capitalExpenditures',
+    'investingCashFlow',
+    'financingCashFlow',
+    'freeCashFlow',
+  ]);
+
   return {
-    income: income.map((r) => ({ ...r, ebitda: (r.ebit ?? null) })),
-    balance: balance.map((r) => ({
-      ...r,
-      debt: (r.shortLongTermDebt ?? 0) + (r.longTermDebt ?? 0) || r.shortLongTermDebt || r.longTermDebt || null,
-    })),
-    cashflow: cashflow.map((r) => ({
-      ...r,
-      freeCashFlow:
-        r.operatingCashFlow != null && r.capitalExpenditures != null
-          ? r.operatingCashFlow + r.capitalExpenditures // capex is already negative in Yahoo's convention
-          : null,
-    })),
+    income: incomeClean,
+    balance: balanceClean,
+    cashflow: cashflowClean,
   };
 }
-
 // ---------------------------------------------------------------------
 // getETFProfile / getETFHoldings
 // ---------------------------------------------------------------------
