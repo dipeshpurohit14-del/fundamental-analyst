@@ -22,7 +22,28 @@ export default function PriceChart({ symbol, trailingEps }) {
     }));
   }, [data, trailingEps]);
 
- const first = chartData[0]?.close; const last = chartData[chartData.length - 1]?.close; const periodChangePct = Number.isFinite(first) && Number.isFinite(last) && first !== 0 ? ((last - first) / first) * 100 : null; const positive = (periodChangePct ?? 0) >= 0;
+  const first = chartData[0]?.close;
+  const last = chartData[chartData.length - 1]?.close;
+  const periodChangePct =
+    Number.isFinite(first) && Number.isFinite(last) && first !== 0 ? ((last - first) / first) * 100 : null;
+  const positive = (periodChangePct ?? 0) >= 0;
+
+  // Compute an explicit Y-axis domain ourselves instead of trusting Recharts'
+  // domain={['auto','auto']} heuristic, which can break on short/flat price
+  // series (common for low-volatility ETFs) and throw deep inside the library.
+  const yDomain = useMemo(() => {
+    const key = mode === 'price' ? 'close' : 'pe';
+    const values = chartData.map((d) => d[key]).filter((v) => Number.isFinite(v));
+    if (values.length === 0) return [0, 1];
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (min === max) {
+      const pad = Math.abs(min || 1) * 0.05 || 1;
+      return [min - pad, max + pad];
+    }
+    const pad = (max - min) * 0.05;
+    return [min - pad, max + pad];
+  }, [chartData, mode]);
 
   return (
     <div className="card p-4">
@@ -70,7 +91,19 @@ export default function PriceChart({ symbol, trailingEps }) {
       {!loading && !error && chartData.length > 0 && (
         <>
           <div className="flex items-baseline gap-2 mb-2">
-           <span className="tnum font-mono text-2xl text-paper"> {mode === 'price' ? fmtINR(last) : Number.isFinite(chartData[chartData.length - 1]?.pe) ? chartData[chartData.length - 1].pe.toFixed(1) : DATA_UNAVAILABLE} </span> {periodChangePct !== null && ( <span className={`text-sm tnum font-mono ${positive ? 'text-gain' : 'text-loss'}`}> {positive ? '+' : ''} {Number.isFinite(periodChangePct) ? periodChangePct.toFixed(2) : '0.00'}% ({range}) </span> )}
+            <span className="tnum font-mono text-2xl text-paper">
+              {mode === 'price'
+                ? fmtINR(last)
+                : Number.isFinite(chartData[chartData.length - 1]?.pe)
+                ? chartData[chartData.length - 1].pe.toFixed(1)
+                : DATA_UNAVAILABLE}
+            </span>
+            {periodChangePct !== null && (
+              <span className={`text-sm tnum font-mono ${positive ? 'text-gain' : 'text-loss'}`}>
+                {positive ? '+' : ''}
+                {Number.isFinite(periodChangePct) ? periodChangePct.toFixed(2) : '0.00'}% ({range})
+              </span>
+            )}
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -91,17 +124,21 @@ export default function PriceChart({ symbol, trailingEps }) {
                 minTickGap={40}
               />
               <YAxis
-                domain={['auto', 'auto']}
+                domain={yDomain}
                 stroke="#59636F"
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
                 width={56}
+                tickFormatter={(v) => (Number.isFinite(v) ? v.toFixed(mode === 'pe' ? 1 : 0) : '')}
               />
               <Tooltip
                 contentStyle={{ background: '#141B24', border: '1px solid #1E2733', borderRadius: 8, fontSize: 12 }}
                 labelFormatter={(t) => fmtDate(t)}
-                formatter={(v) => [mode === 'price' ? fmtINR(v) : v?.toFixed(2), mode === 'price' ? 'Price' : 'P/E']}
+                formatter={(v) => [
+                  mode === 'price' ? fmtINR(v) : Number.isFinite(v) ? v.toFixed(2) : DATA_UNAVAILABLE,
+                  mode === 'price' ? 'Price' : 'P/E',
+                ]}
               />
               <Area
                 type="monotone"
